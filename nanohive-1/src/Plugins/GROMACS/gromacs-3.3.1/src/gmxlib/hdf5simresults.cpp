@@ -112,6 +112,25 @@ void addHDF5atomIds(const unsigned int* atomIds, unsigned int atomCount) {
 }
 
 
+/* FUNCTION: addHDF5atomicNumbers */
+void addHDF5atomicNumbers(const unsigned int* atomicNumbers,
+						  unsigned int atomCount) {
+	if (simResults == 0)
+		return; // Short-circuit
+
+	std::string message;
+	int status =
+		simResults->setFrameAtomicNumbers(HDF5_FRAMESET_NAME, atomicNumbers,
+										  atomCount, message);
+	if (status) {
+		fprintf(stderr, "[HDF5] Unable to set atomic numbers: %d (%s)\n",
+				status, message.c_str());
+		delete simResults;
+		simResults = 0;
+	}
+}
+
+
 /* FUNCTION: addHDF5bonds */
 void addHDF5bonds(const void* bonds, unsigned int bondCount) {
 	if (simResults == 0)

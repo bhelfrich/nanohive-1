@@ -233,12 +233,18 @@ printf(">>> stat.c:write_traj: hdf5 datastore opened - writing topo\n");
 		unsigned int atomCount = top->atoms.nr;
 		unsigned int* atomIds =
 			(unsigned int*)malloc(atomCount*sizeof(unsigned int));
+		unsigned int* atomicNumbers =
+			(unsigned int*)malloc(atomCount*sizeof(unsigned int));
 		unsigned int atomIndex;
 		for (atomIndex = 0; atomIndex < atomCount; atomIndex++) {
 			atomIds[atomIndex] = atomIndex;
+			atomicNumbers[atomIndex] =
+				top->atomtypes.atomnumber[top->atoms.atom[atomIndex].type];
 		}
 		addHDF5atomIds(atomIds, atomCount);
 		free(atomIds);
+		addHDF5atomicNumbers(atomicNumbers, atomCount);
+		free(atomicNumbers);
 		
 		// Write bonds. (From src/kernel/gmxcheck.c:chk_bonds().)
 		//
@@ -246,7 +252,7 @@ printf(">>> stat.c:write_traj: hdf5 datastore opened - writing topo\n");
 		//
 		unsigned int bondCount = 0;
 		int ftype, k, ai, aj;
-		for (ftype = 0; ftype < F_NRE; ftype++) {
+		for (ftype = 0; ftype <= F_SHAKE; ftype++) {
 			if ((interaction_function[ftype].flags & IF_CHEMBOND) ==
 					IF_CHEMBOND) {
 				bondCount += top->idef.il[ftype].nr / 3;
@@ -257,24 +263,33 @@ printf(">>> stat.c:write_traj: hdf5 datastore opened - writing topo\n");
 		unsigned int bondIndex = 0;
 		SimResultsBond bond;
 		void* bonds = (void*)malloc(bondCount*sizeof(SimResultsBond));
-		for (ftype = 0; ftype < F_NRE; ftype++) {
-			if ((interaction_function[ftype].flags & IF_CHEMBOND) ==
-					IF_CHEMBOND) {
-				for (k = 0; k < top->idef.il[ftype].nr; ) {
-					k++;	// "type"
-					bond.order = 0;
-					bond.atomId_1 = top->idef.il[ftype].iatoms[k++];
-					bond.atomId_2 = top->idef.il[ftype].iatoms[k++];
-if (bondIndex >= bondCount) {
-	printf(">>> src/gmxlib/stat.c:write_traj: miscalculated the number of bonds - bondCount=%d\n",
-			bondCount);
-	gmx_fatal(FARGS,"HDF5 error");
-}
-					((SimResultsBond*)bonds)[bondIndex] = bond;
-					bondIndex++;
+		for (ftype = 0; ftype <= F_SHAKE; ftype++) {
+			switch (ftype) {
+			case F_BONDS:
+			case F_G96BONDS:
+			case F_MORSE:
+			case F_CUBICBONDS:
+			case F_SHAKE:
+				if ((interaction_function[ftype].flags & IF_CHEMBOND) ==
+						IF_CHEMBOND) {
+					for (k = 0; k < top->idef.il[ftype].nr; ) {
+						k++;	// "type"
+						bond.order = 0;
+						bond.atomId_1 = top->idef.il[ftype].iatoms[k++];
+						bond.atomId_2 = top->idef.il[ftype].iatoms[k++];
+	if (bondIndex >= bondCount) {
+		printf(">>> src/gmxlib/stat.c:write_traj: miscalculated the number of bonds - bondCount=%d\n",
+				bondCount);
+		gmx_fatal(FARGS,"HDF5 error");
+	}
+						((SimResultsBond*)bonds)[bondIndex] = bond;
+						bondIndex++;
+					}
 				}
+				break;
 			}
 		}
+		bondCount = bondIndex;
 		addHDF5bonds(bonds, bondCount);
 		free(bonds);
 	}

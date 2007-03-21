@@ -11,6 +11,8 @@ extern "C" {
 extern void openHDF5dataStore(const char* dataStoreName);
 extern void addHDF5frame(float time);
 extern void addHDF5atomIds(const unsigned int* atomIds, unsigned int atomCount);
+extern void addHDF5atomicNumbers(const unsigned int* atomicNumbers,
+								 unsigned int atomCount);
 extern void addHDF5bonds(const void* bonds, unsigned int bondCount);
 extern void addHDF5atomCoordinates(const float* coordinates,
 								   unsigned int atomCount);

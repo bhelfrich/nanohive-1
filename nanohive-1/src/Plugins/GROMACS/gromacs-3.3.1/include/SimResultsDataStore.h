@@ -4,6 +4,12 @@
 #ifndef NE1_SIMRESULTSDATASTORE_H
 #define NE1_SIMRESULTSDATASTORE_H
 
+#ifdef WIN32
+#	ifdef _MSC_VER
+#		pragma warning(disable:4786)
+#	endif
+#endif
+
 #include <string>
 #include <vector>
 
@@ -57,6 +63,14 @@ class SimResultsDataStore {
 	 */
 	virtual int openDataStore(const char* directory, std::string& message) = 0;
 
+	
+	/* METHOD: synchronize */
+	/**
+	 * Forces the datastore to be re-read from disk. Use to get the latest data
+	 * written to the datastore.
+	 */
+	virtual void synchronize() = 0;
+	
 	
 	/*
 	 * Name
@@ -526,6 +540,24 @@ class SimResultsDataStore {
 								const unsigned int* atomIds,
 								const unsigned int& atomIdsCount,
 								std::string& message) = 0;
+	/*
+	 * AtomicNumbers
+	 */
+	/** Retrieves an array of atomic numbers for the frame-set. */
+	virtual int getFrameAtomicNumbers(const char* frameSetName,
+									  unsigned int* atomicNumbers,
+									  std::string& message) = 0;
+	
+	/** Sets the array of atomic numbers for the specified frame-set.
+	 *
+	 * @param message		[OUT] description of the error when a non-zero value
+	 *						is returned
+	 * @return 0=successful or non-zero error code
+	 */
+	virtual int setFrameAtomicNumbers(const char* frameSetName,
+									  const unsigned int* atomicNumbers,
+									  const unsigned int& atomicNumbersCount,
+									  std::string& message) = 0;
 	
 	/*
 	 * AtomPositions

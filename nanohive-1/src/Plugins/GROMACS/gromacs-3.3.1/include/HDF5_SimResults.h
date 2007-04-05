@@ -4,6 +4,12 @@
 #ifndef NE1_HDF5_SIMRESULTS_H
 #define NE1_HDF5_SIMRESULTS_H
 
+#ifdef WIN32
+#	ifdef _MSC_VER
+#		pragma warning(disable:4786)
+#	endif
+#endif
+
 #include <stdlib.h>
 #include <map>
 
@@ -33,6 +39,7 @@ class FrameSetInfo {
 			currentFrameIndex = 0;
 			timestampsDatasetId = 0;
 			atomIdsDatasetId = 0;
+			atomicNumbersDatasetId = 0;
 			atomPositionsDatasetId = 0;
 			atomVelocitiesDatasetId = 0;
 			bondsDatasetId = 0;
@@ -42,6 +49,7 @@ class FrameSetInfo {
 		int currentFrameIndex;
 		hid_t timestampsDatasetId;
 		hid_t atomIdsDatasetId;
+		hid_t atomicNumbersDatasetId;
 		hid_t atomPositionsDatasetId;
 		hid_t atomVelocitiesDatasetId;
 		hid_t bondsDatasetId;
@@ -79,7 +87,7 @@ class FrameSetInfo {
 				name/
 					AggregationMode, StepsPerFrame - attributes
 					Timestamps - dataset
-					AtomIds - dataset
+					AtomIds - dataset, AtomicNumbers - dataset
 					AtomPositions, AtomVelocities - dataset
 					Bonds - dataset
 					Measurements - dataset
@@ -90,6 +98,8 @@ class HDF5_SimResults : public SimResultsDataStore {
 		~HDF5_SimResults();
 		
 		int openDataStore(const char* directory, std::string& message);
+		void synchronize();
+		void flush();
 		
 		int getName(std::string& name) const;
 		int setName(const std::string& name, std::string& message);
@@ -175,6 +185,14 @@ class HDF5_SimResults : public SimResultsDataStore {
 							const unsigned int* atomIds,
 							const unsigned int& atomIdsCount,
 							std::string& message);
+		
+		int getFrameAtomicNumbers(const char* frameSetName,
+								  unsigned int* atomicNumbers,
+								  std::string& message);
+		int setFrameAtomicNumbers(const char* frameSetName,
+								  const unsigned int* atomicNumbers,
+								  const unsigned int& atomicNumbersCount,
+								  std::string& message);
 		
 		int getFrameAtomPositions(const char* frameSetName,
 								  const int& frameIndex,
@@ -286,6 +304,12 @@ class HDF5_SimResults : public SimResultsDataStore {
 		int writeBonds(const int& frame, const unsigned int& bondCount,
 					   const void* bonds, hid_t datasetId,
 					   std::string& message);
+		int writeAtomUInts(const char* frameSetName,
+						   const char* dataSetName,
+						   const unsigned int* atomUInts,
+						   const unsigned int& atomUIntsCount,
+						   hid_t& datasetId,
+						   std::string& message);
 		int write3SpaceAtomFloats(const int& frame,
 								  const unsigned int& atomCount,
 								  const float* data,

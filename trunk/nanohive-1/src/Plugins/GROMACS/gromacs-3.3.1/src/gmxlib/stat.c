@@ -230,14 +230,28 @@ printf(">>> stat.c:write_traj: hdf5 datastore opened - writing topo\n");
 	
 		// Write atoms
 		//
+		// One pass through to determine the atom count for the non-solvent
+		// structure. The solvent residues will always be appended to the real
+		// structure.
+		//
+		unsigned int atomIndex = 0;
 		unsigned int atomCount = top->atoms.nr;
+		for (atomIndex = 0; atomIndex < atomCount; atomIndex++) {
+			if (strcmp((*(top->atoms.resname[top->atoms.atom[atomIndex].resnr])),
+				"SOL") == 0) {
+				atomCount = atomIndex;
+				break;
+			}
+		}
+		// Now we know the true atom count
 		unsigned int* atomIds =
 			(unsigned int*)malloc(atomCount*sizeof(unsigned int));
 		unsigned int* atomicNumbers =
 			(unsigned int*)malloc(atomCount*sizeof(unsigned int));
-		unsigned int atomIndex;
 		for (atomIndex = 0; atomIndex < atomCount; atomIndex++) {
 			atomIds[atomIndex] = atomIndex;
+			// NOTE: Atomic numbers are specified in the .itp files, just before
+			// the mass column.
 			atomicNumbers[atomIndex] =
 				top->atomtypes.atomnumber[top->atoms.atom[atomIndex].type];
 		}
@@ -291,9 +305,11 @@ printf(">>> stat.c:write_traj: hdf5 datastore opened - writing topo\n");
 		}
 		bondCount = bondIndex;
 		addHDF5bonds(bonds, bondCount);
-		free(bonds);
+		free(bonds);		
 	}
-	
+	if (fn2ftp(traj) == efNH5)
+		flushHDF5();
+
     fio_flush(fp);
   }
   return fp;

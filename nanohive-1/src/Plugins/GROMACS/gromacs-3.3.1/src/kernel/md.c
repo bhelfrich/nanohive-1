@@ -671,7 +671,7 @@ time_t do_md(FILE *log,t_commrec *cr,t_commrec *mcr,int nfile,t_filenm fnm[],
     ff = (do_per_step(step,inputrec->nstfout)) ? f : NULL;
 
     fp_trn = write_traj(log,cr,traj,nsb,step,t,state->lambda,
-			nrnb,nsb->natoms,xx,vv,ff,state->box, 0);
+			nrnb,nsb->natoms,xx,vv,ff,state->box, top);
     debug_gmx();
     
     /* don't write xtc and last structure for rerunMD */

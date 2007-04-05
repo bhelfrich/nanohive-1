@@ -1698,8 +1698,10 @@ time_t do_steep(FILE *log,int nfile,t_filenm fnm[],
       if (do_per_step(steps_accepted,inputrec->nstfout)) 
 	ff=force[TRY];  
       else 
-	ff=NULL;    
-      if (do_per_step(steps_accepted,inputrec->nstxout)) {
+	ff=NULL;
+	  // BH: Write the initial structure
+      if ((count==0) || (do_per_step(steps_accepted,inputrec->nstxout))) {
+//      if (do_per_step(steps_accepted,inputrec->nstxout)) {
 	xx=pos[TRY];
 	write_traj(log,cr,ftp2fn(efTRN,nfile,fnm), 
 		   nsb,count,(real) count, 

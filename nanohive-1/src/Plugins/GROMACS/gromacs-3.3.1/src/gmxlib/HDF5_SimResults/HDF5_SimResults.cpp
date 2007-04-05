@@ -56,6 +56,7 @@ void HDF5_SimResults::closeDatasets() {
 	while (iter != frameSetInfoMap.end()) {
 		H5Dclose(((*iter).second).timestampsDatasetId);
 		H5Dclose(((*iter).second).atomIdsDatasetId);
+		H5Dclose(((*iter).second).atomicNumbersDatasetId);
 		H5Dclose(((*iter).second).atomPositionsDatasetId);
 		H5Dclose(((*iter).second).atomVelocitiesDatasetId);
 		H5Dclose(((*iter).second).bondsDatasetId);
@@ -113,30 +114,67 @@ int HDF5_SimResults::openDataStore(const char* directory,
 }
 
 
+/* FUNCTION: synchronize */
+void HDF5_SimResults::synchronize() {
+	closeDatasets();
+	H5Fclose(fileId);
+	std::string datastoreFilename = dataStoreDirectory;
+	datastoreFilename.append("/").append(HDF5_SIM_RESULT_FILENAME);
+	fileId = H5Fopen(datastoreFilename.c_str(), H5F_ACC_RDWR, H5P_DEFAULT);
+	openDatasets();
+}
+
+
+/* FUNCTION: flush */
+void HDF5_SimResults::flush() {
+	int resultCode = H5Fflush(fileId, H5F_SCOPE_GLOBAL);
+	if (resultCode)
+		;//message = "Couldn't flush HDF5 file.";
+}
+
+
 /* FUNCTION: openDatasets */
 void HDF5_SimResults::openDatasets() {
 	FrameSetInfo frameSetInfo;
 	frameSetInfo.timestampsDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/Timestamps");
+	if (frameSetInfo.timestampsDatasetId < 0)
+		frameSetInfo.timestampsDatasetId = 0;
 	
 	// Determine current frame index
 	hid_t dataspaceId = H5Dget_space(frameSetInfo.timestampsDatasetId);
 	int frameCount = H5Sget_simple_extent_npoints(dataspaceId);
 	H5Sclose(dataspaceId);
+	frameCount--; // frame indexes start at 0
 	if (frameCount < 0)
 		frameCount = 0;	
-	frameSetInfo.currentFrameIndex = frameCount - 1;
+	frameSetInfo.currentFrameIndex = frameCount;
 		
 	frameSetInfo.atomIdsDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/AtomIds");
+	if (frameSetInfo.atomIdsDatasetId < 0)
+		frameSetInfo.atomIdsDatasetId = 0;
+	frameSetInfo.atomicNumbersDatasetId =
+		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/AtomicNumbers");
+	if (frameSetInfo.atomicNumbersDatasetId < 0)
+		frameSetInfo.atomicNumbersDatasetId = 0;
 	frameSetInfo.atomPositionsDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/AtomPositions");
+	if (frameSetInfo.atomPositionsDatasetId < 0)
+		frameSetInfo.atomPositionsDatasetId = 0;
 	frameSetInfo.atomVelocitiesDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/AtomVelocities");
+	if (frameSetInfo.atomVelocitiesDatasetId < 0)
+		frameSetInfo.atomVelocitiesDatasetId = 0;
 	frameSetInfo.bondsDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/Bonds");
+	if (frameSetInfo.bondsDatasetId < 0)
+		frameSetInfo.bondsDatasetId = 0;
 	frameSetInfo.measurementsDatasetId =
 		H5Dopen(fileId, "/Results/FrameSets/frame-set-1/Measurements");
+	if (frameSetInfo.measurementsDatasetId < 0)
+		frameSetInfo.measurementsDatasetId = 0;
+	
 	frameSetInfoMap[std::string("frame-set-1")] = frameSetInfo;
 }
 
@@ -529,13 +567,6 @@ int HDF5_SimResults::setStepsPerFrame(const char* frameSetName,
 /* FUNCTION: getFrameCount */
 void HDF5_SimResults::getFrameCount(const char* frameSetName,
 									int& frameCount) {
-	closeDatasets();
-	H5Fclose(fileId);
-	std::string datastoreFilename = dataStoreDirectory;
-	datastoreFilename.append("/").append(HDF5_SIM_RESULT_FILENAME);
-	fileId = H5Fopen(datastoreFilename.c_str(), H5F_ACC_RDONLY, H5P_DEFAULT);
-	openDatasets();
-	
 	frameCount = 0;
 	
 	// Check if the frame-set has been added
@@ -598,6 +629,9 @@ int HDF5_SimResults::addFrame(const char* frameSetName, const float& time,
 							  int& frameIndex, std::string& message) {
 	int resultCode;
 	
+	// We flush buffers here assuming that the previous frame must be mostly
+	// complete if the caller is adding a new frame.
+	//
 	resultCode = H5Fflush(fileId, H5F_SCOPE_GLOBAL);
 	if (resultCode)
 		message = "Couldn't flush HDF5 file.";
@@ -733,41 +767,43 @@ int HDF5_SimResults::setFrameAtomIds(const char* frameSetName,
 			resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
 			
 		} else {
-			resultCode = 0;
+			hid_t datasetId;
+			resultCode =
+				writeAtomUInts(frameSetName, "AtomIds", atomIds,
+							   atomIdsCount, datasetId, message);
+			if (resultCode == 0)
+				frameSetInfo.atomIdsDatasetId = datasetId;
+		}
+	}
+	return resultCode;
+}
+	
+
+/* FUNCTION: getFrameAtomicNumbers */
+int HDF5_SimResults::getFrameAtomicNumbers(const char* frameSetName,
+										   unsigned int* atomicNumbers,
+										   std::string& message) {
+	FrameSetInfo& frameSetInfo = frameSetInfoMap[frameSetName];
+	
+	// Check if the frame-set has been added
+	int resultCode = checkFrameSetExistence(frameSetName, message);
+	if (resultCode == 0) { // Frame-set exists
+						   // Check if the atomIds have already been set
+		resultCode =
+		checkFrameSetDatasetExistence(frameSetName,
+									  frameSetInfo.atomicNumbersDatasetId,
+									  "AtomNumbers",
+									  message);
+		if (resultCode == 0) {
 			herr_t status;
 			
-			// Create the dataspace
-			hsize_t dims[1] = { atomIdsCount };
-			hid_t dataspaceId =
-				H5Screate_simple(1,		// rank
-								 dims,	// dimensions
-								 NULL);	// max dimensions
-			
-			// Modify dataset creation properties, i.e. enable chunking,
-			// compression
-			hid_t datasetParams = H5Pcreate(H5P_DATASET_CREATE);
-			if (USE_CHUNKING) {
-				hsize_t chunkDims[1] = { atomIdsCount };
-				status = H5Pset_chunk(datasetParams, 1 /* rank */, chunkDims);
-			}
-			if (USE_SHUFFLING) {
-				status = H5Pset_shuffle(datasetParams);
-			}
-			if (USE_COMPRESSION) {
-				status = H5Pset_deflate(datasetParams, COMPRESSION_LVL);
-			}
-			
-			// Create a new dataset within the file using datasetParams creation
-			// properties.
-			std::string groupName = "/Results/FrameSets/";
-			groupName.append(frameSetName).append("/AtomIds");
-			hid_t datasetId =
-				H5Dcreate(fileId, groupName.c_str(), H5T_NATIVE_UINT,
-						  dataspaceId, datasetParams);
-			if (datasetId < 0) {
-				message =
-					"Unable to create the atom ids dataset for /Results/FrameSets/";
-				message.append(frameSetName).append(": ");
+			// Read the atomic numbers
+			status =
+				H5Dread(frameSetInfo.atomicNumbersDatasetId, H5T_NATIVE_UINT,
+						H5S_ALL, H5S_ALL, H5P_DEFAULT,
+						atomicNumbers);
+			if (status < 0) {
+				message = "Unable to read atomic numbers: ";
 				
 				// Get error description from HDF5
 				std::string hdf5Message;
@@ -776,33 +812,42 @@ int HDF5_SimResults::setFrameAtomIds(const char* frameSetName,
 				if (status > -1)
 					message.append(hdf5Message).append(".");
 				resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
-				
-			} else {
-				H5Sclose(dataspaceId);
-				
-				// Write the atom identifiers
-				status =
-					H5Dwrite(datasetId, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
-							 H5P_DEFAULT, atomIds);
-				if (status == 0) {
-					frameSetInfo.atomIdsDatasetId = datasetId;
-					
-				} else {					
-					message = "Unable to write atom identifiers: ";
-					
-					// Get error description from HDF5
-					std::string hdf5Message;
-					status =
-						H5Ewalk(H5E_WALK_UPWARD, H5_ErrorStackWalker,
-								&hdf5Message);
-					if (status > -1)
-						message.append(hdf5Message).append(".");
-					resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
-					
-					H5Dclose(datasetId);
-				}
 			}
-			H5Pclose(datasetParams);
+		}
+	}
+	return resultCode;
+}
+
+
+/* FUNCTION: setFrameAtomicNumbers */
+int HDF5_SimResults::setFrameAtomicNumbers(const char* frameSetName,
+										   const unsigned int* atomicNumbers,
+										   const unsigned int& atomicNumbersCount,
+										   std::string& message) {
+	FrameSetInfo& frameSetInfo = frameSetInfoMap[frameSetName];
+	
+	// Check if the frame-set has been added
+	int resultCode = checkFrameSetExistence(frameSetName, message);
+	if (resultCode == 0) { // Frame-set exists
+		
+		// Check if the atomic numbers have already been set (can only set them
+		// once).
+		resultCode =
+		checkFrameSetDatasetExistence(frameSetName,
+									  frameSetInfo.atomicNumbersDatasetId,
+									  "AtomicNumbers",
+									  message);
+		if (resultCode == 0) {
+			message = "Atomic numbers have already been set.";
+			resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
+			
+		} else {
+			hid_t datasetId;
+			resultCode =
+				writeAtomUInts(frameSetName, "AtomicNumbers", atomicNumbers,
+							   atomicNumbersCount, datasetId, message);
+			if (resultCode == 0)
+				frameSetInfo.atomicNumbersDatasetId = datasetId;
 		}
 	}
 	return resultCode;
@@ -1810,6 +1855,85 @@ int HDF5_SimResults::writeBonds(const int& frame, const unsigned int& bondCount,
 	}
 	H5Sclose(memoryspace);
     H5Sclose(filespace);	
+	
+	return resultCode;
+}
+
+
+/* FUNCTION: writeAtomUInts */
+int HDF5_SimResults::writeAtomUInts(const char* frameSetName,
+									const char* dataSetName,
+									const unsigned int* atomUInts,
+									const unsigned int& atomUIntsCount,
+									hid_t& datasetId,
+									std::string& message) {
+	int resultCode = 0;
+	herr_t status;
+	
+	// Create the dataspace
+	hsize_t dims[1] = { atomUIntsCount };
+	hid_t dataspaceId =
+		H5Screate_simple(1,		// rank
+						 dims,	// dimensions
+						 NULL);	// max dimensions
+	
+	// Modify dataset creation properties, i.e. enable chunking,
+	// compression
+	hid_t datasetParams = H5Pcreate(H5P_DATASET_CREATE);
+	if (USE_CHUNKING) {
+		hsize_t chunkDims[1] = { atomUIntsCount };
+		status = H5Pset_chunk(datasetParams, 1 /* rank */, chunkDims);
+	}
+	if (USE_SHUFFLING) {
+		status = H5Pset_shuffle(datasetParams);
+	}
+	if (USE_COMPRESSION) {
+		status = H5Pset_deflate(datasetParams, COMPRESSION_LVL);
+	}
+	
+	// Create a new dataset within the file using datasetParams creation
+	// properties.
+	std::string groupName = "/Results/FrameSets/";
+	groupName.append(frameSetName).append("/").append(dataSetName);
+	datasetId =
+		H5Dcreate(fileId, groupName.c_str(), H5T_NATIVE_UINT,
+				  dataspaceId, datasetParams);
+	if (datasetId < 0) {
+		message =
+		"Unable to create the dataset for /Results/FrameSets/";
+		message.append(frameSetName).append(": ");
+		
+		// Get error description from HDF5
+		std::string hdf5Message;
+		status =
+			H5Ewalk(H5E_WALK_UPWARD, H5_ErrorStackWalker, &hdf5Message);
+		if (status > -1)
+			message.append(hdf5Message).append(".");
+		resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
+		
+	} else {
+		H5Sclose(dataspaceId);
+		
+		// Write the atom unsigned integers
+		status =
+			H5Dwrite(datasetId, H5T_NATIVE_UINT, H5S_ALL, H5S_ALL,
+					 H5P_DEFAULT, atomUInts);
+		if (status != 0) {
+			message = "Unable to write atom data: ";
+			
+			// Get error description from HDF5
+			std::string hdf5Message;
+			status =
+				H5Ewalk(H5E_WALK_UPWARD, H5_ErrorStackWalker,
+						&hdf5Message);
+			if (status > -1)
+				message.append(hdf5Message).append(".");
+			resultCode = SRDS_UNABLE_TO_COMPLETE_OPERATION;
+			
+			H5Dclose(datasetId);
+		}
+	}
+	H5Pclose(datasetParams);
 	
 	return resultCode;
 }

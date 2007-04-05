@@ -16,6 +16,7 @@ extern void addHDF5atomicNumbers(const unsigned int* atomicNumbers,
 extern void addHDF5bonds(const void* bonds, unsigned int bondCount);
 extern void addHDF5atomCoordinates(const float* coordinates,
 								   unsigned int atomCount);
+extern void flushHDF5();
 
 #ifdef __cplusplus
 } // extern "C" {

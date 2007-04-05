@@ -167,3 +167,12 @@ void addHDF5atomCoordinates(const float* coordinates, unsigned int atomCount) {
 	}
 }
 
+
+/* FUNCTION: flushHDF5 */
+void flushHDF5() {
+	if (simResults == 0)
+		return; // Short-circuit
+
+	simResults->flush();	
+}
+

@@ -1,0 +1,3 @@
+[NanoHive-1](http://www.nanohive-1.com/) is a modular simulator used for modeling the physical world at a nanometer scale. The intended purpose of the simulator is to act as a tool for the study, experimentation, and development of nanotech entities. [NanoHive-1](http://www.nanohive-1.com/) is a GPL/LGPL licensed open-source development - you can download and use it for free (see the Licensing section for more details and restrictions.)
+
+[NanoHive-1](http://www.nanohive-1.com/) can be run stand-alone, or easily integrated to support other applications such as CAD tools. See the Feature List and Software Architecture for a good understanding of what Nano-Hive is and what it has to offer.
